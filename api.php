@@ -39,6 +39,32 @@ function fail($msg, $code = 400) {
     exit;
 }
 
+/* ---------------- Validation des tâches ---------------- */
+
+// Le statut arrive du navigateur : on le confronte à la liste autorisée
+// plutôt que de le passer tel quel à une colonne ENUM (erreur SQL sinon).
+function taskStatus($value) {
+    $allowed = ['encours', 'effectue', 'retard'];
+    return in_array($value, $allowed, true) ? $value : 'encours';
+}
+
+// Les attributs min/max du formulaire ne valent que côté navigateur.
+function taskProgress($value) {
+    return max(0, min(100, (int)$value));
+}
+
+// Chaîne vide -> NULL, pour ne pas insérer '0000-00-00' en base.
+function taskDate($value) {
+    $value = trim((string)$value);
+    return $value === '' ? null : $value;
+}
+
+function checkTaskDates($startDate, $endDate) {
+    if ($startDate !== null && $endDate !== null && $startDate > $endDate) {
+        fail("La date de fin prévue ne peut pas précéder la date de début.");
+    }
+}
+
 $action = $_GET['action'] ?? '';
 
 try {
@@ -76,15 +102,26 @@ try {
                 break;
             }
 
-            // Bascule automatique en retard des tâches en échéance dépassée
-            $pdo->exec("UPDATE tasks SET status='retard' WHERE status <> 'effectue' AND status <> 'retard' AND end_date IS NOT NULL AND end_date < CURDATE()");
+            // Bascule automatique en retard des tâches en échéance dépassée…
+            $pdo->exec("UPDATE tasks SET status='retard'
+                        WHERE status = 'encours'
+                          AND end_date IS NOT NULL AND end_date < CURDATE()");
+            // …et retour en cours si l'échéance a depuis été repoussée ou retirée
+            // (sans cette bascule inverse, une tâche passée en retard le restait
+            // définitivement, même après correction de sa date de fin).
+            $pdo->exec("UPDATE tasks SET status='encours'
+                        WHERE status = 'retard'
+                          AND (end_date IS NULL OR end_date >= CURDATE())");
 
             $settings = $pdo->query("SELECT * FROM settings WHERE id=1")->fetch();
             $users = $pdo->query("SELECT id, username, role, name FROM users ORDER BY created_at")->fetchAll();
             $employees = $pdo->query("SELECT * FROM employees ORDER BY name")->fetchAll();
             $entities = $pdo->query("SELECT * FROM entities ORDER BY is_internal DESC, created_at")->fetchAll();
-            $projects = $pdo->query("SELECT * FROM projects ORDER BY created_at")->fetchAll();
-            $tasks = $pdo->query("SELECT * FROM tasks ORDER BY created_at")->fetchAll();
+            // seq (AUTO_INCREMENT) = ordre d'insertion réel, du plus ancien au plus
+            // récent. created_at ne suffit pas : sa précision d'une seconde met à
+            // égalité les lignes créées d'un même geste (seed, compte-rendu partagé).
+            $projects = $pdo->query("SELECT * FROM projects ORDER BY seq")->fetchAll();
+            $tasks = $pdo->query("SELECT * FROM tasks ORDER BY seq")->fetchAll();
             $meetings = $pdo->query("SELECT * FROM meetings ORDER BY date DESC")->fetchAll();
             $reports = $pdo->query("SELECT * FROM reports")->fetchAll();
 
@@ -153,9 +190,20 @@ try {
             $projectId = $d['projectId'] ?? '';
             $name = trim($d['name'] ?? '');
             if ($name === '' || $projectId === '') fail('Champs requis manquants.');
+
+            // Sans ce contrôle, un projet inexistant déclenche une violation de clé
+            // étrangère renvoyée au navigateur en « Erreur base de données ».
+            $exists = $pdo->prepare("SELECT COUNT(*) c FROM projects WHERE id=?");
+            $exists->execute([$projectId]);
+            if ($exists->fetch()['c'] == 0) fail("Ce projet n'existe pas.", 404);
+
+            $startDate = taskDate($d['startDate'] ?? '');
+            $endDate   = taskDate($d['endDate'] ?? '');
+            checkTaskDates($startDate, $endDate);
+
             $id = genId('tsk');
             $pdo->prepare("INSERT INTO tasks (id, project_id, name, employee, progress, status, start_date, end_date, observation) VALUES (?,?,?,?,?,?,?,?,?)")
-                ->execute([$id, $projectId, $name, $d['employee'] ?? '', (int)($d['progress'] ?? 0), $d['status'] ?? 'encours', $d['startDate'] ?: null, $d['endDate'] ?: null, $d['observation'] ?? '']);
+                ->execute([$id, $projectId, $name, $d['employee'] ?? '', taskProgress($d['progress'] ?? 0), taskStatus($d['status'] ?? 'encours'), $startDate, $endDate, $d['observation'] ?? '']);
             echo json_encode(['ok' => true, 'id' => $id]);
             break;
         }
@@ -164,15 +212,33 @@ try {
             $d = input();
             $id = $d['id'] ?? '';
             if ($id === '') fail('id requis.');
+            $name = trim($d['name'] ?? '');
+            if ($name === '') fail('Nom requis.');
+
+            // rowCount() ne distingue pas « tâche absente » de « aucune valeur
+            // modifiée » : on vérifie l'existence séparément pour ne pas répondre
+            // ok à une modification qui n'a rien touché.
+            $exists = $pdo->prepare("SELECT COUNT(*) c FROM tasks WHERE id=?");
+            $exists->execute([$id]);
+            if ($exists->fetch()['c'] == 0) fail("Cette tâche n'existe plus.", 404);
+
+            $startDate = taskDate($d['startDate'] ?? '');
+            $endDate   = taskDate($d['endDate'] ?? '');
+            checkTaskDates($startDate, $endDate);
+
             $pdo->prepare("UPDATE tasks SET name=?, employee=?, progress=?, status=?, start_date=?, end_date=?, observation=? WHERE id=?")
-                ->execute([trim($d['name'] ?? ''), $d['employee'] ?? '', (int)($d['progress'] ?? 0), $d['status'] ?? 'encours', $d['startDate'] ?: null, $d['endDate'] ?: null, $d['observation'] ?? '', $id]);
+                ->execute([$name, $d['employee'] ?? '', taskProgress($d['progress'] ?? 0), taskStatus($d['status'] ?? 'encours'), $startDate, $endDate, $d['observation'] ?? '', $id]);
             echo json_encode(['ok' => true]);
             break;
         }
         case 'delete_task': {
             requireAdmin();
             $d = input();
-            $pdo->prepare("DELETE FROM tasks WHERE id=?")->execute([$d['id'] ?? '']);
+            $id = $d['id'] ?? '';
+            if ($id === '') fail('id requis.');
+            $stmt = $pdo->prepare("DELETE FROM tasks WHERE id=?");
+            $stmt->execute([$id]);
+            if ($stmt->rowCount() === 0) fail("Cette tâche n'existe plus.", 404);
             echo json_encode(['ok' => true]);
             break;
         }

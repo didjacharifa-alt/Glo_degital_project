@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS entities (
 
 CREATE TABLE IF NOT EXISTS projects (
   id          VARCHAR(20) PRIMARY KEY,
+  seq         INT NOT NULL AUTO_INCREMENT UNIQUE,
   entity_id   VARCHAR(20) NOT NULL,
   name        VARCHAR(255) NOT NULL,
   description TEXT NULL,
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS tasks (
   id          VARCHAR(20) PRIMARY KEY,
+  seq         INT NOT NULL AUTO_INCREMENT UNIQUE,
   project_id  VARCHAR(20) NOT NULL,
   name        VARCHAR(255) NOT NULL,
   employee    VARCHAR(255) NULL,

@@ -571,7 +571,9 @@ function viewProject(id){
   const p = projectById(id);
   if(!p) return `<main><div class="empty">Projet introuvable.</div></main>`;
   const entity = entityById(p.entityId);
-  const tasks = tasksOf(p.id).slice().sort((a,b)=> (a.startDate||'9999-12-31').localeCompare(b.startDate||'9999-12-31'));
+  // Pas de re-tri ici : l'API renvoie déjà les tâches par ordre d'ancienneté
+  // (ORDER BY seq), et filter() préserve cet ordre.
+  const tasks = tasksOf(p.id);
   const meetings = meetingsOf(p.id);
   const crumbs = entity.isInternal
     ? [{label:'Accueil',hash:'/home'},{label:'Mon entreprise',hash:'/entity/'+entity.id},{label:p.name}]
@@ -602,7 +604,7 @@ function viewProject(id){
 
     ${tasks.length ? kpiBlock(tasks) : ''}
 
-    <div class="section-title">Tâches <span style="font-weight:500;font-size:12px;color:var(--muted);">(triées par date de début)</span></div>
+    <div class="section-title">Tâches <span style="font-weight:500;font-size:12px;color:var(--muted);">(de la plus ancienne à la plus récente)</span></div>
     ${tasksBlock}
 
     <div class="section-title">
@@ -808,6 +810,9 @@ function createTaskModal(projectId){
 function editTaskModal(taskId){
   if(!guardAdmin()) return;
   const t = STATE.tasks.find(x=>x.id===taskId);
+  // La tâche peut avoir été supprimée depuis une autre session : sans ce
+  // garde-fou, le formulaire s'ouvrait vide puis échouait sur t.id.
+  if(!t){ toast("Cette tâche n'existe plus.", true); return; }
   openModal('Modifier la tâche', taskFormBody(t), async data=>{
     await apiCall('update_task','POST',{id:t.id, name:data.name, employee:data.employee, progress:Number(data.progress)||0, status:data.status, startDate:data.startDate, endDate:data.endDate, observation:data.observation});
     await refreshState(); render(); toast('Tâche mise à jour.');
