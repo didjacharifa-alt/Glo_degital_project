@@ -150,6 +150,10 @@ table.tasks th{
   background:var(--surface-2);padding:10px 12px;border-bottom:1px solid var(--border);
 }
 table.tasks td{padding:11px 12px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:top;}
+/* La colonne « Fiche » ayant élargi le tableau, les dates ne doivent pas
+   se couper en deux lignes. Le tableau défile plutôt horizontalement. */
+table.tasks td.date{white-space:nowrap;}
+.tasks-scroll{overflow-x:auto;}
 table.tasks tr:last-child td{border-bottom:none;}
 .progress-bar{height:6px;border-radius:4px;background:var(--surface-2);width:100%;overflow:hidden;margin-top:4px;}
 .progress-fill{height:100%;background:var(--brand-steel);}
@@ -168,6 +172,9 @@ table.tasks tr:last-child td{border-bottom:none;}
 .report-box h3{margin-bottom:10px;}
 .todo-block{margin-top:16px;background:var(--surface-2);border:1px dashed var(--border);border-radius:8px;padding:14px;}
 .todo-block h4{font-size:13px;color:var(--brand-steel);margin-bottom:8px;}
+/* Ce textarea n'est pas dans un .field : sans cette règle il garde la largeur
+   par défaut du navigateur, soit une vingtaine de caractères. */
+.todo-block textarea{width:100%;min-height:80px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;resize:vertical;}
 
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--brand-ink);}
 .login-card{background:var(--surface);padding:38px 36px;border-radius:14px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
@@ -192,15 +199,39 @@ table.tasks tr:last-child td{border-bottom:none;}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 
+/* Les messages s'empilent : deux toasts consécutifs (« Envoi… » puis
+   « Fichier joint. ») se superposaient au même endroit. */
+.toast-stack{position:fixed;bottom:24px;right:24px;z-index:200;display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
 .toast{
-  position:fixed;bottom:24px;right:24px;background:var(--brand-ink);color:#fff;padding:13px 18px;border-radius:10px;
-  font-size:13.5px;box-shadow:var(--shadow);z-index:200;max-width:340px;animation:toastIn .25s ease;
+  background:var(--brand-ink);color:#fff;padding:13px 18px;border-radius:10px;
+  font-size:13.5px;box-shadow:var(--shadow);max-width:340px;animation:toastIn .25s ease;
 }
 .toast.err{background:var(--late);}
 @keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 
 .empty{color:var(--muted);font-size:13.5px;padding:22px;text-align:center;border:1px dashed var(--border);border-radius:var(--radius);background:var(--surface-2);}
 .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;}
+
+/* ---- Pièces jointes ---- */
+.file-cell{display:flex;flex-direction:column;gap:6px;min-width:150px;}
+.file-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.file-link{
+  color:var(--brand-steel);font-weight:600;font-size:12.5px;
+  display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;
+}
+.file-link:hover{text-decoration:underline;}
+.file-none{color:var(--muted);font-size:12.5px;}
+.file-size{color:var(--muted);font-size:11.5px;margin-left:6px;}
+.file-block{margin-top:16px;background:var(--surface-2);border:1px dashed var(--border);border-radius:8px;padding:14px;}
+.file-block h4{font-size:13px;color:var(--brand-steel);margin-bottom:8px;}
+
+/* ---- Import de tâches ---- */
+.import-hint{font-size:12.5px;color:var(--muted);background:var(--surface-2);border-radius:8px;padding:12px;line-height:1.55;}
+.import-cols{width:100%;border-collapse:collapse;margin:8px 0;}
+.import-cols td{padding:3px 6px;border-bottom:1px solid var(--border);font-size:12px;vertical-align:top;}
+.import-cols tr:last-child td{border-bottom:none;}
+.import-cols td:first-child{white-space:nowrap;color:var(--text);width:38%;}
+.import-errors{margin:0;padding-left:18px;max-height:240px;overflow-y:auto;font-size:12.5px;color:var(--muted);line-height:1.6;}
 
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 .settings-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
@@ -238,6 +269,36 @@ async function apiCall(action, method='GET', body=null){
   try{ data = await res.json(); }catch(e){ data = {}; }
   if(!res.ok){ throw new Error(data.error || ('Erreur serveur ('+res.status+')')); }
   return data;
+}
+
+// Envoi de fichier : le navigateur doit poser lui-même l'en-tête multipart
+// (avec sa frontière), on ne fixe donc surtout pas Content-Type ici.
+async function apiUpload(action, formData){
+  let res, data;
+  try{
+    res = await fetch('api.php?action='+encodeURIComponent(action), {
+      method:'POST', credentials:'same-origin', body: formData
+    });
+  }catch(e){
+    throw new Error('Impossible de joindre le serveur.');
+  }
+  try{ data = await res.json(); }catch(e){ data = {}; }
+  if(!res.ok){ throw new Error(data.error || ('Erreur serveur ('+res.status+')')); }
+  return data;
+}
+
+// Les noms de fichiers viennent de l'utilisateur et sont insérés dans du HTML.
+function esc(value){
+  return String(value==null?'':value)
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
+}
+
+function formatFileSize(bytes){
+  if(!bytes && bytes!==0) return '';
+  if(bytes < 1024) return bytes+' o';
+  if(bytes < 1024*1024) return Math.round(bytes/1024)+' Ko';
+  return (bytes/1024/1024).toFixed(1).replace('.',',')+' Mo';
 }
 
 async function refreshState(){
@@ -296,10 +357,17 @@ function currentRoute(){
 
 /* ---------------- Toast ---------------- */
 function toast(msg, isError){
+  let stack = document.getElementById('toastStack');
+  if(!stack){
+    stack = document.createElement('div');
+    stack.id = 'toastStack';
+    stack.className = 'toast-stack';
+    document.body.appendChild(stack);
+  }
   const el = document.createElement('div');
   el.className='toast' + (isError?' err':'');
   el.textContent = msg;
-  document.body.appendChild(el);
+  stack.appendChild(el);
   setTimeout(()=>el.remove(), 3200);
 }
 
@@ -598,6 +666,7 @@ function viewProject(id){
       </div>
       <div style="display:flex;gap:8px;">
         ${isAdmin() ? `<button class="btn ghost sm" onclick="editProjectModal('${p.id}')">Modifier</button>` : ''}
+        ${isAdmin() ? `<button class="btn ghost sm" onclick="importTasksModal('${p.id}')">⇪ Importer un tableau</button>` : ''}
         ${isAdmin() ? `<button class="btn accent" onclick="createTaskModal('${p.id}')">+ Nouvelle tâche</button>` : ''}
       </div>
     </div>
@@ -630,6 +699,7 @@ function taskSingleCard(t){
     </div>
     <div class="progress-bar"><div class="progress-fill" style="width:${t.progress}%;"></div></div>
     ${t.observation ? `<div class="obs" style="margin-top:10px;max-width:100%;">Observation : ${t.observation}</div>` : ''}
+    <div style="margin-top:12px;font-size:13px;">Fiche : ${taskFileCell(t)}</div>
     ${isAdmin() ? `<div class="task-actions" style="margin-top:14px;">
       <button class="btn ghost sm" onclick="editTaskModal('${t.id}')">Modifier</button>
       <button class="btn danger sm" onclick="deleteTask('${t.id}')">Supprimer</button>
@@ -637,11 +707,29 @@ function taskSingleCard(t){
   </div>`;
 }
 
+// Cellule « Fiche » : lien de téléchargement si un fichier est joint, et pour
+// l'ADMIN de quoi en déposer, remplacer ou retirer un.
+function taskFileCell(t){
+  const link = t.fileName
+    ? `<a class="file-link" href="api.php?action=download&type=task&id=${encodeURIComponent(t.id)}" title="${esc(t.fileName)} · ${formatFileSize(t.fileSize)}">📎 ${esc(t.fileName)}</a>`
+    : `<span class="file-none">—</span>`;
+  if(!isAdmin()) return link;
+  return `
+    <div class="file-cell">
+      ${link}
+      <div class="file-actions">
+        <button class="btn ghost sm" onclick="pickTaskFile('${t.id}')">${t.fileName?'Remplacer':'Joindre'}</button>
+        ${t.fileName?`<button class="btn danger sm" onclick="removeTaskFile('${t.id}')">Retirer</button>`:''}
+      </div>
+    </div>`;
+}
+
 function taskTable(tasks){
   return `
+  <div class="tasks-scroll">
   <table class="tasks">
     <thead><tr>
-      <th>Tâche</th><th>Responsable</th><th>Avancement</th><th>Début</th><th>Fin prévue</th><th>Statut</th><th>Observation</th>${isAdmin()?'<th></th>':''}
+      <th>Tâche</th><th>Responsable</th><th>Avancement</th><th>Début</th><th>Fin prévue</th><th>Statut</th><th>Observation</th><th>Fiche</th>${isAdmin()?'<th></th>':''}
     </tr></thead>
     <tbody>
       ${tasks.map(t=>`
@@ -649,10 +737,11 @@ function taskTable(tasks){
           <td><b>${t.name}</b></td>
           <td>${t.employee||'—'}</td>
           <td style="min-width:120px;">${t.progress}%<div class="progress-bar"><div class="progress-fill" style="width:${t.progress}%;"></div></div></td>
-          <td>${t.startDate||'—'}</td>
-          <td>${t.endDate||'—'}</td>
+          <td class="date">${t.startDate||'—'}</td>
+          <td class="date">${t.endDate||'—'}</td>
           <td>${statusBadge(t.status)}</td>
           <td class="obs">${t.observation||''}</td>
+          <td>${taskFileCell(t)}</td>
           ${isAdmin() ? `<td><div class="task-actions">
             <button class="btn ghost sm" onclick="editTaskModal('${t.id}')">✎</button>
             <button class="btn danger sm" onclick="deleteTask('${t.id}')">✕</button>
@@ -660,7 +749,8 @@ function taskTable(tasks){
         </tr>
       `).join('')}
     </tbody>
-  </table>`;
+  </table>
+  </div>`;
 }
 
 function meetingRow(m){
@@ -703,6 +793,19 @@ function viewMeeting(id){
       <div class="todo-block">
         <h4>Tâches à faire (une par ligne)</h4>
         <textarea id="repTodo" ${!isAdmin()?'disabled':''} placeholder="Ex: Livrer les visuels réseaux sociaux">${report.todoRaw||''}</textarea>
+      </div>
+
+      <div class="file-block">
+        <h4>Compte-rendu joint</h4>
+        ${report.fileName ? `
+          <a class="file-link" href="api.php?action=download&type=report&id=${encodeURIComponent(report.id)}">📎 ${esc(report.fileName)}</a>
+          <span class="file-size">${formatFileSize(report.fileSize)}</span>
+        ` : `<span class="file-none">Aucun fichier joint pour l'instant.</span>`}
+        ${isAdmin() && report.id ? `
+          <div class="file-actions" style="margin-top:10px;">
+            <button class="btn ghost sm" onclick="pickReportFile('${report.id}')">${report.fileName?'Remplacer le fichier':'Joindre un fichier'}</button>
+            ${report.fileName?`<button class="btn danger sm" onclick="removeReportFile('${report.id}')">Retirer</button>`:''}
+          </div>` : ''}
       </div>
       ${isAdmin() ? `
       <div class="modal-actions" style="justify-content:flex-start;margin-top:16px;">
@@ -800,12 +903,35 @@ function taskFormBody(t){
     <div class="field"><label>Observation</label><textarea name="observation">${t.observation||''}</textarea></div>
   `;
 }
+
+// Le serveur réconcilie statut et avancement (« effectué » vaut 100 %, et
+// inversement). On applique la même règle dans le formulaire pour que l'écran
+// montre ce qui sera réellement enregistré.
+function bindTaskFormCoupling(overlay){
+  const statusEl = overlay.querySelector('select[name=status]');
+  const progressEl = overlay.querySelector('input[name=progress]');
+  if(!statusEl || !progressEl) return;
+
+  statusEl.addEventListener('change', ()=>{
+    if(statusEl.value === 'effectue') progressEl.value = 100;
+    // Repasser une tâche terminée en cours suppose de rouvrir l'avancement,
+    // sinon le serveur la remettrait aussitôt en « effectué ».
+    else if(Number(progressEl.value) >= 100) progressEl.value = 90;
+  });
+
+  progressEl.addEventListener('input', ()=>{
+    if(Number(progressEl.value) >= 100) statusEl.value = 'effectue';
+    else if(statusEl.value === 'effectue') statusEl.value = 'encours';
+  });
+}
+
 function createTaskModal(projectId){
   if(!guardAdmin()) return;
-  openModal('Nouvelle tâche', taskFormBody(), async data=>{
+  const overlay = openModal('Nouvelle tâche', taskFormBody(), async data=>{
     await apiCall('create_task','POST',{projectId, name:data.name, employee:data.employee, progress:Number(data.progress)||0, status:data.status, startDate:data.startDate, endDate:data.endDate, observation:data.observation});
     await refreshState(); render(); toast('Tâche ajoutée.');
   }, 'Créer');
+  bindTaskFormCoupling(overlay);
 }
 function editTaskModal(taskId){
   if(!guardAdmin()) return;
@@ -813,10 +939,11 @@ function editTaskModal(taskId){
   // La tâche peut avoir été supprimée depuis une autre session : sans ce
   // garde-fou, le formulaire s'ouvrait vide puis échouait sur t.id.
   if(!t){ toast("Cette tâche n'existe plus.", true); return; }
-  openModal('Modifier la tâche', taskFormBody(t), async data=>{
+  const overlay = openModal('Modifier la tâche', taskFormBody(t), async data=>{
     await apiCall('update_task','POST',{id:t.id, name:data.name, employee:data.employee, progress:Number(data.progress)||0, status:data.status, startDate:data.startDate, endDate:data.endDate, observation:data.observation});
     await refreshState(); render(); toast('Tâche mise à jour.');
   }, 'Enregistrer');
+  bindTaskFormCoupling(overlay);
 }
 async function deleteTask(taskId){
   if(!guardAdmin()) return;
@@ -825,6 +952,129 @@ async function deleteTask(taskId){
     await apiCall('delete_task','POST',{id:taskId});
     await refreshState(); render(); toast('Tâche supprimée.');
   }catch(err){ toast(err.message, true); }
+}
+
+/* =========================================================================
+   PIÈCES JOINTES
+   ========================================================================= */
+
+const UPLOAD_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.odt,.ods,.png,.jpg,.jpeg,.gif,.webp,.zip';
+
+// Ouvre le sélecteur de fichiers du navigateur puis envoie le fichier retenu.
+function pickAndUpload(action, id){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = UPLOAD_ACCEPT;
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.addEventListener('change', async ()=>{
+    const file = input.files && input.files[0];
+    input.remove();
+    if(!file) return;
+    const fd = new FormData();
+    fd.append('id', id);
+    fd.append('file', file);
+    toast('Envoi du fichier…');
+    try{
+      await apiUpload(action, fd);
+      await refreshState(); render(); toast('Fichier joint.');
+    }catch(err){ toast(err.message, true); }
+  });
+  input.click();
+}
+
+function pickTaskFile(taskId){
+  if(!guardAdmin()) return;
+  pickAndUpload('upload_task_file', taskId);
+}
+async function removeTaskFile(taskId){
+  if(!guardAdmin()) return;
+  if(!confirm('Retirer le fichier joint à cette tâche ?')) return;
+  try{
+    await apiCall('delete_task_file','POST',{id:taskId});
+    await refreshState(); render(); toast('Fichier retiré.');
+  }catch(err){ toast(err.message, true); }
+}
+
+function pickReportFile(reportId){
+  if(!guardAdmin()) return;
+  pickAndUpload('upload_report_file', reportId);
+}
+async function removeReportFile(reportId){
+  if(!guardAdmin()) return;
+  if(!confirm('Retirer le compte-rendu joint ?')) return;
+  try{
+    await apiCall('delete_report_file','POST',{id:reportId});
+    await refreshState(); render(); toast('Fichier retiré.');
+  }catch(err){ toast(err.message, true); }
+}
+
+/* =========================================================================
+   IMPORT DE TÂCHES DEPUIS UN TABLEAU
+   ========================================================================= */
+
+function importTasksModal(projectId){
+  if(!guardAdmin()) return;
+  let overlay;
+  overlay = openModal('Importer des tâches', `
+    <div class="field">
+      <label>Fichier Excel (.xlsx), CSV ou Word (.docx)</label>
+      <input name="file" type="file" accept=".xlsx,.csv,.docx" required>
+    </div>
+    <div class="import-hint">
+      <b>Format attendu</b> — la première ligne du tableau sert d'en-tête.
+      Seule la colonne du nom est obligatoire ; les autres sont facultatives
+      et peuvent être dans n'importe quel ordre.
+      <table class="import-cols">
+        <tr><td><b>Tâche</b></td><td>nom de la tâche <i>(obligatoire)</i></td></tr>
+        <tr><td>Responsable</td><td>nom de l'employé</td></tr>
+        <tr><td>Avancement</td><td>0 à 100, le signe % est accepté</td></tr>
+        <tr><td>Statut</td><td>en cours · effectué · en retard</td></tr>
+        <tr><td>Début</td><td>JJ/MM/AAAA ou AAAA-MM-JJ</td></tr>
+        <tr><td>Fin</td><td>idem — aussi « échéance »</td></tr>
+        <tr><td>Observation</td><td>commentaire libre</td></tr>
+      </table>
+      Les lignes sans nom de tâche sont ignorées et signalées à la fin.
+    </div>
+  `, async ()=>{
+    const input = overlay.querySelector('input[name=file]');
+    const file = input.files && input.files[0];
+    if(!file) throw new Error('Choisissez un fichier à importer.');
+
+    const fd = new FormData();
+    fd.append('projectId', projectId);
+    fd.append('file', file);
+    const res = await apiUpload('import_tasks', fd);
+
+    await refreshState(); render();
+    if(res.errors && res.errors.length){
+      showImportReport(res.created, res.errors);
+    }else{
+      toast(`${res.created} tâche(s) importée(s).`);
+    }
+  }, 'Importer');
+}
+
+// L'import réussit même si certaines lignes ont posé problème : on les liste
+// plutôt que de les noyer dans un toast qui disparaît au bout de 3 secondes.
+function showImportReport(created, errors){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>Import terminé</h3>
+      <p style="font-size:14px;margin-bottom:12px;">
+        <b>${created} tâche(s) importée(s).</b>
+        ${errors.length} point(s) d'attention :
+      </p>
+      <ul class="import-errors">${errors.map(e=>`<li>${esc(e)}</li>`).join('')}</ul>
+      <div class="modal-actions">
+        <button type="button" class="btn accent" id="importReportClose">Fermer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#importReportClose').onclick = ()=>overlay.remove();
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
 }
 
 function createMeetingModal(projectId){

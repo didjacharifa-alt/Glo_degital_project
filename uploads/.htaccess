@@ -1,0 +1,22 @@
+# =========================================================
+# Aucun accès direct à ce dossier.
+#
+# Les fichiers déposés ici ne sont jamais servis par Apache : ils passent
+# tous par api.php?action=download, qui vérifie d'abord que l'utilisateur
+# est connecté. Sans cela, l'URL d'un document client serait consultable
+# par n'importe qui.
+#
+# Cela neutralise aussi le risque qu'un fichier déposé soit exécuté comme
+# du code par le serveur.
+# =========================================================
+
+# Apache 2.4
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+
+# Apache 2.2
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

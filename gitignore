@@ -1,0 +1,6 @@
+config.php
+
+# Fichiers déposés par les utilisateurs : ils vivent sur le serveur,
+# pas dans le dépôt. Seule la protection du dossier est versionnée.
+uploads/*
+!uploads/.htaccess

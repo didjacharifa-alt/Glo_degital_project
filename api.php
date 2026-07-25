@@ -9,6 +9,8 @@ session_start();
 
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/lib_files.php';
+require_once __DIR__ . '/lib_import.php';
 
 function genId($prefix) { return $prefix . '_' . bin2hex(random_bytes(4)); }
 
@@ -63,6 +65,21 @@ function checkTaskDates($startDate, $endDate) {
     if ($startDate !== null && $endDate !== null && $startDate > $endDate) {
         fail("La date de fin prévue ne peut pas précéder la date de début.");
     }
+}
+
+// Statut et avancement décrivent la même réalité : on les réconcilie dans les
+// deux sens pour éviter les états contradictoires (« effectué » à 30 %, ou
+// 100 % encore « en cours ») qui faussaient les indicateurs du tableau de bord.
+// Retourne le couple [statut, avancement].
+function normalizeTask($status, $progress) {
+    $status = taskStatus($status);
+    $progress = taskProgress($progress);
+    if ($status === 'effectue') {
+        $progress = 100;
+    } elseif ($progress === 100) {
+        $status = 'effectue';
+    }
+    return [$status, $progress];
 }
 
 $action = $_GET['action'] ?? '';
@@ -140,9 +157,9 @@ try {
                 'employees' => array_map(fn($e) => ['id'=>$e['id'],'name'=>$e['name']], $employees),
                 'entities' => array_map(fn($e) => ['id'=>$e['id'],'name'=>$e['name'],'isInternal'=>(bool)$e['is_internal'],'avatar'=>$e['avatar']], $entities),
                 'projects' => array_map(fn($p) => ['id'=>$p['id'],'entityId'=>$p['entity_id'],'name'=>$p['name'],'description'=>$p['description'],'endDate'=>$p['end_date']], $projects),
-                'tasks' => array_map(fn($t) => ['id'=>$t['id'],'projectId'=>$t['project_id'],'name'=>$t['name'],'employee'=>$t['employee'],'progress'=>(int)$t['progress'],'status'=>$t['status'],'startDate'=>$t['start_date'],'endDate'=>$t['end_date'],'observation'=>$t['observation']], $tasks),
+                'tasks' => array_map(fn($t) => ['id'=>$t['id'],'projectId'=>$t['project_id'],'name'=>$t['name'],'employee'=>$t['employee'],'progress'=>(int)$t['progress'],'status'=>$t['status'],'startDate'=>$t['start_date'],'endDate'=>$t['end_date'],'observation'=>$t['observation'],'fileName'=>$t['file_name'],'fileSize'=>$t['file_size'] !== null ? (int)$t['file_size'] : null], $tasks),
                 'meetings' => array_map(fn($m) => ['id'=>$m['id'],'projectId'=>$m['project_id'],'title'=>$m['title'],'date'=>$m['date']], $meetings),
-                'reports' => array_map(fn($r) => ['id'=>$r['id'],'meetingId'=>$r['meeting_id'],'summary'=>$r['summary'],'todoRaw'=>$r['todo_raw'],'shared'=>(bool)$r['shared'],'sharedAt'=>$r['shared_at']], $reports),
+                'reports' => array_map(fn($r) => ['id'=>$r['id'],'meetingId'=>$r['meeting_id'],'summary'=>$r['summary'],'todoRaw'=>$r['todo_raw'],'shared'=>(bool)$r['shared'],'sharedAt'=>$r['shared_at'],'fileName'=>$r['file_name'],'fileSize'=>$r['file_size'] !== null ? (int)$r['file_size'] : null], $reports),
             ]);
             break;
         }
@@ -201,9 +218,11 @@ try {
             $endDate   = taskDate($d['endDate'] ?? '');
             checkTaskDates($startDate, $endDate);
 
+            [$status, $progress] = normalizeTask($d['status'] ?? 'encours', $d['progress'] ?? 0);
+
             $id = genId('tsk');
             $pdo->prepare("INSERT INTO tasks (id, project_id, name, employee, progress, status, start_date, end_date, observation) VALUES (?,?,?,?,?,?,?,?,?)")
-                ->execute([$id, $projectId, $name, $d['employee'] ?? '', taskProgress($d['progress'] ?? 0), taskStatus($d['status'] ?? 'encours'), $startDate, $endDate, $d['observation'] ?? '']);
+                ->execute([$id, $projectId, $name, $d['employee'] ?? '', $progress, $status, $startDate, $endDate, $d['observation'] ?? '']);
             echo json_encode(['ok' => true, 'id' => $id]);
             break;
         }
@@ -226,8 +245,10 @@ try {
             $endDate   = taskDate($d['endDate'] ?? '');
             checkTaskDates($startDate, $endDate);
 
+            [$status, $progress] = normalizeTask($d['status'] ?? 'encours', $d['progress'] ?? 0);
+
             $pdo->prepare("UPDATE tasks SET name=?, employee=?, progress=?, status=?, start_date=?, end_date=?, observation=? WHERE id=?")
-                ->execute([$name, $d['employee'] ?? '', taskProgress($d['progress'] ?? 0), taskStatus($d['status'] ?? 'encours'), $startDate, $endDate, $d['observation'] ?? '', $id]);
+                ->execute([$name, $d['employee'] ?? '', $progress, $status, $startDate, $endDate, $d['observation'] ?? '', $id]);
             echo json_encode(['ok' => true]);
             break;
         }
@@ -236,10 +257,152 @@ try {
             $d = input();
             $id = $d['id'] ?? '';
             if ($id === '') fail('id requis.');
-            $stmt = $pdo->prepare("DELETE FROM tasks WHERE id=?");
+
+            // Le fichier joint doit partir avec la tâche, sinon il resterait
+            // indéfiniment dans uploads/ sans plus rien pour le référencer.
+            $stmt = $pdo->prepare("SELECT file_path FROM tasks WHERE id=?");
             $stmt->execute([$id]);
-            if ($stmt->rowCount() === 0) fail("Cette tâche n'existe plus.", 404);
+            $row = $stmt->fetch();
+            if (!$row) fail("Cette tâche n'existe plus.", 404);
+
+            $pdo->prepare("DELETE FROM tasks WHERE id=?")->execute([$id]);
+            deleteStoredFile($row['file_path']);
             echo json_encode(['ok' => true]);
+            break;
+        }
+
+        /* ---------------- IMPORT DE TÂCHES ---------------- */
+        case 'import_tasks': {
+            requireAdmin();
+            // Envoi multipart : les champs arrivent par $_POST, pas en JSON.
+            $projectId = $_POST['projectId'] ?? '';
+            if ($projectId === '') fail('Projet manquant.');
+
+            $exists = $pdo->prepare("SELECT COUNT(*) c FROM projects WHERE id=?");
+            $exists->execute([$projectId]);
+            if ($exists->fetch()['c'] == 0) fail("Ce projet n'existe pas.", 404);
+
+            if (!isset($_FILES['file'])) fail("Aucun fichier reçu.");
+            if ($_FILES['file']['error'] !== UPLOAD_ERR_OK) fail(uploadErrorMessage($_FILES['file']['error']));
+            if (!is_uploaded_file($_FILES['file']['tmp_name'])) fail("Envoi invalide.");
+
+            $ext = uploadExtension($_FILES['file']['name']);
+            if (!in_array($ext, ['xlsx', 'csv', 'docx'], true)) {
+                fail("Format non pris en charge pour l'import (.$ext). Utilisez un fichier .xlsx, .csv ou .docx.");
+            }
+
+            $rows = readTableFromFile($_FILES['file']['tmp_name'], $ext);
+            $parsed = parseImportedTasks($rows);
+            if (!$parsed['tasks']) {
+                fail("Aucune tâche exploitable dans ce fichier. " . implode(' ', array_slice($parsed['errors'], 0, 3)));
+            }
+
+            // Tout ou rien : un import à moitié appliqué serait pénible à
+            // rattraper, les tâches créées n'étant pas distinguables des autres.
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("INSERT INTO tasks (id, project_id, name, employee, progress, status, start_date, end_date, observation) VALUES (?,?,?,?,?,?,?,?,?)");
+                foreach ($parsed['tasks'] as $t) {
+                    $stmt->execute([genId('tsk'), $projectId, $t['name'], $t['employee'], $t['progress'], $t['status'], $t['startDate'], $t['endDate'], $t['observation']]);
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            echo json_encode([
+                'ok' => true,
+                'created' => count($parsed['tasks']),
+                'errors' => $parsed['errors'],
+            ]);
+            break;
+        }
+
+        /* ---------------- PIÈCES JOINTES ---------------- */
+        case 'upload_task_file': {
+            requireAdmin();
+            $id = $_POST['id'] ?? '';
+            if ($id === '') fail('id requis.');
+            $stmt = $pdo->prepare("SELECT file_path FROM tasks WHERE id=?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if (!$row) fail("Cette tâche n'existe plus.", 404);
+
+            $stored = storeUploadedFile('file', 'tsk');
+            $pdo->prepare("UPDATE tasks SET file_name=?, file_path=?, file_size=?, file_uploaded_at=NOW() WHERE id=?")
+                ->execute([$stored['name'], $stored['path'], $stored['size'], $id]);
+            // Remplacement : l'ancien fichier n'est effacé qu'une fois le
+            // nouveau enregistré, pour ne pas perdre les deux en cas d'échec.
+            deleteStoredFile($row['file_path']);
+
+            echo json_encode(['ok' => true, 'fileName' => $stored['name'], 'fileSize' => $stored['size']]);
+            break;
+        }
+        case 'delete_task_file': {
+            requireAdmin();
+            $d = input();
+            $id = $d['id'] ?? '';
+            if ($id === '') fail('id requis.');
+            $stmt = $pdo->prepare("SELECT file_path FROM tasks WHERE id=?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if (!$row) fail("Cette tâche n'existe plus.", 404);
+
+            $pdo->prepare("UPDATE tasks SET file_name=NULL, file_path=NULL, file_size=NULL, file_uploaded_at=NULL WHERE id=?")->execute([$id]);
+            deleteStoredFile($row['file_path']);
+            echo json_encode(['ok' => true]);
+            break;
+        }
+        case 'upload_report_file': {
+            requireAdmin();
+            $id = $_POST['id'] ?? '';
+            if ($id === '') fail('id requis.');
+            $stmt = $pdo->prepare("SELECT file_path FROM reports WHERE id=?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if (!$row) fail("Ce compte-rendu n'existe plus.", 404);
+
+            $stored = storeUploadedFile('file', 'rep');
+            $pdo->prepare("UPDATE reports SET file_name=?, file_path=?, file_size=?, file_uploaded_at=NOW() WHERE id=?")
+                ->execute([$stored['name'], $stored['path'], $stored['size'], $id]);
+            deleteStoredFile($row['file_path']);
+
+            echo json_encode(['ok' => true, 'fileName' => $stored['name'], 'fileSize' => $stored['size']]);
+            break;
+        }
+        case 'delete_report_file': {
+            requireAdmin();
+            $d = input();
+            $id = $d['id'] ?? '';
+            if ($id === '') fail('id requis.');
+            $stmt = $pdo->prepare("SELECT file_path FROM reports WHERE id=?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if (!$row) fail("Ce compte-rendu n'existe plus.", 404);
+
+            $pdo->prepare("UPDATE reports SET file_name=NULL, file_path=NULL, file_size=NULL, file_uploaded_at=NULL WHERE id=?")->execute([$id]);
+            deleteStoredFile($row['file_path']);
+            echo json_encode(['ok' => true]);
+            break;
+        }
+        case 'download': {
+            // Lecture seule : accessible aussi au rôle LECTURE, mais jamais
+            // sans session — c'est ce qui protège les documents clients.
+            requireLogin();
+            $type = $_GET['type'] ?? '';
+            $id = $_GET['id'] ?? '';
+            if ($id === '') fail('id requis.');
+
+            $table = $type === 'task' ? 'tasks' : ($type === 'report' ? 'reports' : '');
+            if ($table === '') fail('Type de document inconnu.');
+
+            $stmt = $pdo->prepare("SELECT file_name, file_path FROM `$table` WHERE id=?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if (!$row || !$row['file_path']) fail("Aucun fichier joint.", 404);
+
+            sendStoredFile($row['file_path'], $row['file_name']);
             break;
         }
 
@@ -262,7 +425,17 @@ try {
         case 'delete_meeting': {
             requireAdmin();
             $d = input();
-            $pdo->prepare("DELETE FROM meetings WHERE id=?")->execute([$d['id'] ?? '']); // cascade supprime le report
+            $id = $d['id'] ?? '';
+            if ($id === '') fail('id requis.');
+
+            // La cascade SQL efface la ligne du compte-rendu, mais pas le
+            // fichier déposé sur le disque : il faut le retrouver avant.
+            $stmt = $pdo->prepare("SELECT file_path FROM reports WHERE meeting_id=?");
+            $stmt->execute([$id]);
+            $report = $stmt->fetch();
+
+            $pdo->prepare("DELETE FROM meetings WHERE id=?")->execute([$id]);
+            if ($report) deleteStoredFile($report['file_path']);
             echo json_encode(['ok' => true]);
             break;
         }
@@ -287,15 +460,28 @@ try {
             $pdo->prepare("UPDATE reports SET summary=?, todo_raw=? WHERE id=?")
                 ->execute([$d['summary'] ?? '', $d['todoRaw'] ?? '', $id]);
 
-            $report = $pdo->query("SELECT * FROM reports WHERE id=" . $pdo->quote($id))->fetch();
-            $meeting = $pdo->query("SELECT * FROM meetings WHERE id=" . $pdo->quote($report['meeting_id']))->fetch();
+            $stmt = $pdo->prepare("SELECT * FROM reports WHERE id=?");
+            $stmt->execute([$id]);
+            $report = $stmt->fetch();
+            if (!$report) fail("Ce compte-rendu n'existe plus.", 404);
+
+            $stmt = $pdo->prepare("SELECT * FROM meetings WHERE id=?");
+            $stmt->execute([$report['meeting_id']]);
+            $meeting = $stmt->fetch();
+            if (!$meeting) fail("La réunion liée à ce compte-rendu n'existe plus.", 404);
+
+            // Les tâches issues d'un compte-rendu partent de la réunion qui les a
+            // décidées et sont attendues sous quinzaine. Sans échéance, elles ne
+            // pouvaient jamais basculer en retard ni apparaître dans les indicateurs.
+            $startDate = $meeting['date'];
+            $dueDate = (new DateTime($startDate))->modify('+14 days')->format('Y-m-d');
 
             $lines = array_filter(array_map('trim', explode("\n", $d['todoRaw'] ?? '')));
             $created = 0;
-            $stmt = $pdo->prepare("INSERT INTO tasks (id, project_id, name, employee, progress, status, start_date, end_date, observation) VALUES (?,?,?,?,0,'encours',?,NULL,?)");
+            $stmt = $pdo->prepare("INSERT INTO tasks (id, project_id, name, employee, progress, status, start_date, end_date, observation) VALUES (?,?,?,?,0,'encours',?,?,?)");
             foreach ($lines as $line) {
                 $obs = "Générée automatiquement depuis le compte-rendu \"{$meeting['title']}\" ({$meeting['date']}).";
-                $stmt->execute([genId('tsk'), $meeting['project_id'], $line, '', date('Y-m-d'), $obs]);
+                $stmt->execute([genId('tsk'), $meeting['project_id'], $line, '', $startDate, $dueDate, $obs]);
                 $created++;
             }
 

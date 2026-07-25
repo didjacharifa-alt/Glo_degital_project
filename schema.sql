@@ -57,6 +57,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   start_date  DATE NULL,
   end_date    DATE NULL,
   observation TEXT NULL,
+  -- Fiche détaillée jointe à la tâche. file_path est le nom du fichier tel que
+  -- stocké dans uploads/ ; file_name conserve le nom d'origine pour l'affichage.
+  file_name        VARCHAR(255) NULL,
+  file_path        VARCHAR(255) NULL,
+  file_size        INT NULL,
+  file_uploaded_at DATETIME NULL,
   created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -76,6 +82,12 @@ CREATE TABLE IF NOT EXISTS reports (
   todo_raw   TEXT NULL,
   shared     TINYINT(1) NOT NULL DEFAULT 0,
   shared_at  DATETIME NULL,
+  -- Compte-rendu joint sous forme de fichier (PDF, Word…), en complément
+  -- ou en remplacement de la saisie directe dans `summary`.
+  file_name        VARCHAR(255) NULL,
+  file_path        VARCHAR(255) NULL,
+  file_size        INT NULL,
+  file_uploaded_at DATETIME NULL,
   FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
