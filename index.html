@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agence — Gestion Clients &amp; Projets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand-ink:#122A3E;
+  --brand-steel:#2B4C66;
+  --brand-accent:#D98A3D;
+  --bg:#F2F4F3;
+  --surface:#FFFFFF;
+  --surface-2:#F8F9F8;
+  --text:#152230;
+  --muted:#5B6B78;
+  --border:#E1E5E3;
+  --done:#2F9E63;
+  --progress:#D9822B;
+  --late:#D64545;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(16,24,33,.06), 0 4px 14px rgba(16,24,33,.05);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter',system-ui,sans-serif;
+  min-height:100vh;
+}
+h1,h2,h3,h4{font-family:'Sora',system-ui,sans-serif;margin:0;letter-spacing:-.01em;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;cursor:pointer;}
+::selection{background:var(--brand-accent);color:#fff;}
+
+#app{min-height:100vh;display:flex;flex-direction:column;}
+.navbar{
+  background:var(--brand-ink);color:#fff;display:flex;align-items:center;gap:18px;
+  padding:0 24px;height:64px;position:sticky;top:0;z-index:50;box-shadow:var(--shadow);
+}
+.nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.nav-logo img{height:36px;width:36px;object-fit:cover;border-radius:8px;}
+.logo-box{
+  height:36px;width:36px;border-radius:8px;background:var(--brand-accent);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Sora';font-weight:800;color:#1a1a1a;font-size:14px;
+}
+.nav-company{font-family:'Sora';font-weight:700;font-size:16px;}
+.nav-spacer{flex:1;}
+.nav-btn{
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);
+  color:#fff;padding:8px 14px;border-radius:8px;font-size:13.5px;font-weight:600;
+  display:flex;align-items:center;gap:6px;transition:background .15s;
+}
+.nav-btn:hover{background:rgba(255,255,255,.18);}
+.nav-btn.internal{background:var(--brand-accent);border-color:var(--brand-accent);color:#1a1a1a;}
+.nav-user{font-size:13px;color:rgba(255,255,255,.75);display:flex;align-items:center;gap:10px;}
+.role-pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.12);letter-spacing:.03em;}
+.role-pill.admin{background:var(--brand-accent);color:#1a1a1a;}
+
+.breadcrumb{padding:14px 28px 0 28px;font-size:13px;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.breadcrumb a:hover{color:var(--brand-steel);text-decoration:underline;}
+.breadcrumb .sep{opacity:.5;}
+
+main{flex:1;padding:18px 28px 60px 28px;max-width:1180px;width:100%;margin:0 auto;}
+
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:10px 0 22px 0;flex-wrap:wrap;}
+.page-head h1{font-size:26px;}
+.page-head .sub{color:var(--muted);font-size:14px;margin-top:4px;}
+
+.btn{
+  border:none;border-radius:8px;padding:9px 16px;font-size:13.5px;font-weight:600;
+  background:var(--brand-ink);color:#fff;transition:opacity .15s, transform .1s;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.btn:hover{opacity:.88;}
+.btn:active{transform:translateY(1px);}
+.btn.accent{background:var(--brand-accent);color:#1a1a1a;}
+.btn.ghost{background:transparent;color:var(--brand-ink);border:1px solid var(--border);}
+.btn.danger{background:#fdecec;color:var(--late);}
+.btn.sm{padding:6px 11px;font-size:12.5px;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+.grid{display:grid;gap:14px;}
+.grid.cards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));}
+
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;box-shadow:var(--shadow);transition:transform .12s,box-shadow .12s;
+}
+.card.clickable:hover{transform:translateY(-2px);box-shadow:0 4px 18px rgba(16,24,33,.1);cursor:pointer;}
+
+.entity-card{display:flex;flex-direction:column;gap:10px;}
+.entity-top{display:flex;align-items:center;gap:12px;}
+.avatar{
+  height:44px;width:44px;border-radius:10px;background:var(--surface-2);
+  display:flex;align-items:center;justify-content:center;font-family:'Sora';font-weight:700;
+  color:var(--brand-steel);border:1px solid var(--border);font-size:15px;flex:none;object-fit:cover;
+}
+.entity-name{font-family:'Sora';font-weight:700;font-size:15px;}
+.entity-meta{font-size:12.5px;color:var(--muted);}
+.entity-stats{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);}
+.entity-stats b{font-weight:700;}
+.entity-stats .stat-done b{color:var(--done);}
+.entity-stats .stat-progress b{color:var(--progress);}
+.entity-stats .stat-late b{color:var(--late);}
+
+.status-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.01em;}
+.status-dot{height:7px;width:7px;border-radius:50%;display:inline-block;}
+.status-effectue{background:#e5f6ec;color:var(--done);}
+.status-effectue .status-dot{background:var(--done);}
+.status-encours{background:#fdf1e2;color:var(--progress);}
+.status-encours .status-dot{background:var(--progress);}
+.status-retard{background:#fbe9e9;color:var(--late);}
+.status-retard .status-dot{background:var(--late);}
+
+.section-title{font-family:'Sora';font-weight:700;font-size:16px;margin:26px 0 12px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:8px;}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--brand-steel);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);}
+.kpi-label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px;}
+.kpi-value{font-family:'Sora';font-weight:700;font-size:22px;}
+.kpi-pct{font-size:13px;color:var(--muted);font-weight:600;margin-left:4px;}
+.kpi-card.kpi-late{border-left-color:var(--late);}
+.kpi-card.kpi-progress{border-left-color:var(--progress);}
+.kpi-card.kpi-done{border-left-color:var(--done);}
+.kpi-card.kpi-byemployee{grid-column:span 2;border-left-color:var(--late);}
+.kpi-emp-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);}
+.kpi-emp-row:last-child{border-bottom:none;}
+@media (max-width:600px){ .kpi-card.kpi-byemployee{grid-column:span 1;} }
+
+.project-row{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:10px;box-shadow:var(--shadow);
+}
+.project-row:hover{border-color:var(--brand-steel);}
+.project-main{flex:1;min-width:0;}
+.project-main h4{font-size:14.5px;font-weight:700;}
+.project-main .desc{font-size:12.5px;color:var(--muted);margin-top:2px;}
+.project-tags{font-size:12px;color:var(--muted);margin-top:4px;}
+
+.task-single{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
+table.tasks{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);}
+table.tasks th{
+  text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+  background:var(--surface-2);padding:10px 12px;border-bottom:1px solid var(--border);
+}
+table.tasks td{padding:11px 12px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:top;}
+table.tasks tr:last-child td{border-bottom:none;}
+.progress-bar{height:6px;border-radius:4px;background:var(--surface-2);width:100%;overflow:hidden;margin-top:4px;}
+.progress-fill{height:100%;background:var(--brand-steel);}
+.obs{font-size:12.5px;color:var(--muted);font-style:italic;max-width:220px;}
+.task-actions{display:flex;gap:6px;}
+
+.meeting-row{
+  display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;box-shadow:var(--shadow);
+}
+.meeting-date{font-family:'IBM Plex Mono';font-size:12px;background:var(--surface-2);border-radius:6px;padding:6px 9px;color:var(--brand-steel);font-weight:600;flex:none;}
+.meeting-title{flex:1;font-weight:600;font-size:14px;}
+.shared-tag{font-size:11px;color:var(--done);font-weight:700;}
+
+.report-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);}
+.report-box h3{margin-bottom:10px;}
+.todo-block{margin-top:16px;background:var(--surface-2);border:1px dashed var(--border);border-radius:8px;padding:14px;}
+.todo-block h4{font-size:13px;color:var(--brand-steel);margin-bottom:8px;}
+
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--brand-ink);}
+.login-card{background:var(--surface);padding:38px 36px;border-radius:14px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.login-card .logo-box{margin:0 auto 14px auto;height:52px;width:52px;font-size:19px;}
+.login-card h1{text-align:center;font-size:20px;}
+.login-card .sub{text-align:center;color:var(--muted);font-size:13px;margin:6px 0 22px 0;}
+.field{margin-bottom:14px;}
+.field label{font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px;}
+.field input, .field textarea, .field select{
+  width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--surface);
+}
+.field textarea{resize:vertical;min-height:70px;}
+.login-hint{margin-top:18px;font-size:11.5px;color:var(--muted);background:var(--surface-2);border-radius:8px;padding:10px;line-height:1.5;}
+.err{color:var(--late);font-size:12.5px;margin-top:8px;}
+
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(15,23,32,.55);display:flex;align-items:flex-start;justify-content:center;
+  padding:40px 16px;z-index:100;overflow-y:auto;
+}
+.modal{background:var(--surface);border-radius:14px;width:100%;max-width:520px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+.modal h3{margin-bottom:16px;}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+.toast{
+  position:fixed;bottom:24px;right:24px;background:var(--brand-ink);color:#fff;padding:13px 18px;border-radius:10px;
+  font-size:13.5px;box-shadow:var(--shadow);z-index:200;max-width:340px;animation:toastIn .25s ease;
+}
+.toast.err{background:var(--late);}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+.empty{color:var(--muted);font-size:13.5px;padding:22px;text-align:center;border:1px dashed var(--border);border-radius:var(--radius);background:var(--surface-2);}
+.loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;}
+
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.settings-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
+.settings-block h4{margin-bottom:12px;font-size:14px;}
+.userline{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
+.userline:last-child{border-bottom:none;}
+@media (max-width:720px){
+  .settings-grid{grid-template-columns:1fr;}
+  .grid2{grid-template-columns:1fr;}
+  main{padding:14px;}
+}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading-screen">Chargement…</div></div>
+
+<script>
+/* =========================================================================
+   ÉTAT — les données viennent maintenant de MySQL via api.php (fetch)
+   Plus aucune donnée n'est stockée dans le navigateur (localStorage supprimé).
+   ========================================================================= */
+let STATE = null;
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+async function apiCall(action, method='GET', body=null){
+  const opts = { method, credentials:'same-origin', headers:{} };
+  if(body){ opts.headers['Content-Type']='application/json'; opts.body = JSON.stringify(body); }
+  let res, data;
+  try{
+    res = await fetch('api.php?action='+encodeURIComponent(action), opts);
+  }catch(e){
+    throw new Error('Impossible de joindre le serveur.');
+  }
+  try{ data = await res.json(); }catch(e){ data = {}; }
+  if(!res.ok){ throw new Error(data.error || ('Erreur serveur ('+res.status+')')); }
+  return data;
+}
+
+async function refreshState(){
+  STATE = await apiCall('state');
+}
+
+/* ---------------- Helpers métier (lecture seule, sur STATE) ---------------- */
+function currentUser(){ return STATE && STATE.loggedIn ? STATE.user : null; }
+function isAdmin(){ const u = currentUser(); return !!u && u.role==='ADMIN'; }
+function entityById(id){ return STATE.entities.find(e=>e.id===id); }
+function projectById(id){ return STATE.projects.find(p=>p.id===id); }
+function tasksOf(projectId){ return STATE.tasks.filter(t=>t.projectId===projectId); }
+function projectsOf(entityId){ return STATE.projects.filter(p=>p.entityId===entityId); }
+function meetingsOf(projectId){ return STATE.meetings.filter(m=>m.projectId===projectId); }
+function reportOfMeeting(meetingId){ return STATE.reports.find(r=>r.meetingId===meetingId); }
+
+function computeProjectStatus(project){
+  const tasks = tasksOf(project.id);
+  if(tasks.length===0){
+    if(project.endDate && new Date(project.endDate) < new Date(todayISO())) return 'retard';
+    return 'encours';
+  }
+  if(tasks.every(t=>t.status==='effectue')) return 'effectue';
+  if(tasks.some(t=>t.status==='retard')) return 'retard';
+  return 'encours';
+}
+function computeEntityStatus(entity){
+  const projects = projectsOf(entity.id);
+  if(projects.length===0) return 'encours';
+  const statuses = projects.map(computeProjectStatus);
+  if(statuses.every(s=>s==='effectue')) return 'effectue';
+  if(statuses.some(s=>s==='retard')) return 'retard';
+  return 'encours';
+}
+const STATUS_LABEL = {effectue:'Effectué', encours:'En cours', retard:'En retard'};
+function statusBadge(status){
+  return `<span class="status-badge status-${status}"><span class="status-dot"></span>${STATUS_LABEL[status]||status}</span>`;
+}
+
+function applyTheme(){
+  if(!STATE || !STATE.settings) return;
+  const r = document.documentElement.style;
+  r.setProperty('--brand-ink', STATE.settings.primaryColor);
+  r.setProperty('--brand-steel', STATE.settings.secondaryColor);
+  r.setProperty('--brand-accent', STATE.settings.accentColor);
+}
+
+/* ---------------- Router ---------------- */
+function go(hash){ location.hash = hash; }
+window.addEventListener('hashchange', render);
+
+function currentRoute(){
+  const h = location.hash.slice(1) || '/home';
+  return h.split('/').filter(Boolean);
+}
+
+/* ---------------- Toast ---------------- */
+function toast(msg, isError){
+  const el = document.createElement('div');
+  el.className='toast' + (isError?' err':'');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 3200);
+}
+
+/* ---------------- Modal générique (supporte onSubmit async) ---------------- */
+function openModal(title, bodyHtml, onSubmit, submitLabel){
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>${title}</h3>
+      <form id="modalForm">${bodyHtml}</form>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="modalCancel">Annuler</button>
+        <button type="submit" form="modalForm" class="btn accent" id="modalSubmit">${submitLabel||'Enregistrer'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#modalCancel').onclick = ()=>overlay.remove();
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+  overlay.querySelector('#modalForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const data = new FormData(e.target);
+    const obj = {};
+    for(const [k,v] of data.entries()) obj[k]=v;
+    const submitBtn = overlay.querySelector('#modalSubmit');
+    const originalLabel = submitBtn.textContent;
+    submitBtn.disabled = true; submitBtn.textContent = 'Enregistrement…';
+    try{
+      await onSubmit(obj);
+      overlay.remove();
+    }catch(err){
+      toast(err.message || 'Une erreur est survenue.', true);
+      submitBtn.disabled = false; submitBtn.textContent = originalLabel;
+    }
+  });
+  return overlay;
+}
+
+function guardAdmin(){
+  if(!isAdmin()){ toast("Action réservée au rôle ADMIN.", true); return false; }
+  return true;
+}
+
+/* =========================================================================
+   RENDER — VUES
+   ========================================================================= */
+function render(){
+  applyTheme();
+  const app = document.getElementById('app');
+  if(!STATE || !STATE.loggedIn){ app.innerHTML = viewLogin(); bindLogin(); return; }
+
+  const route = currentRoute();
+  let content = '';
+  if(route[0]==='home' || route.length===0) content = viewHome();
+  else if(route[0]==='entity') content = viewEntity(route[1]);
+  else if(route[0]==='project') content = viewProject(route[1]);
+  else if(route[0]==='meeting') content = viewMeeting(route[1]);
+  else if(route[0]==='settings') content = viewSettings();
+  else content = `<div class="empty">Page introuvable.</div>`;
+
+  app.innerHTML = `${navbar()}${content}`;
+  bindGlobalActions();
+}
+
+function navbar(){
+  const u = currentUser();
+  const s = STATE.settings;
+  const logo = s.logoDataUrl ? `<img src="${s.logoDataUrl}" alt="logo">` : `<div class="logo-box">${s.logoText}</div>`;
+  const internal = STATE.entities.find(e=>e.isInternal);
+  return `
+  <div class="navbar">
+    <div class="nav-logo" onclick="go('/home')">
+      ${logo}
+      <div class="nav-company">${s.companyName}</div>
+    </div>
+    ${internal ? `<button class="nav-btn internal" onclick="go('/entity/${internal.id}')">🏢 Mon entreprise</button>` : ''}
+    <div class="nav-spacer"></div>
+    ${isAdmin() ? `<button class="nav-btn" onclick="go('/settings')">⚙️ Paramètres</button>` : ''}
+    <div class="nav-user">
+      <span>${u.name}</span>
+      <span class="role-pill ${u.role==='ADMIN'?'admin':''}">${u.role}</span>
+      <button class="nav-btn" onclick="logout()">Déconnexion</button>
+    </div>
+  </div>`;
+}
+
+function breadcrumb(items){
+  return `<div class="breadcrumb">${items.map((it,i)=>{
+    const isLast = i===items.length-1;
+    const sep = i>0 ? `<span class="sep">/</span>` : '';
+    return sep + (isLast ? `<span>${it.label}</span>` : `<a href="#${it.hash}">${it.label}</a>`);
+  }).join('')}</div>`;
+}
+
+/* ---------- LOGIN ---------- */
+function viewLogin(){
+  return `
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="logo-box">AG</div>
+      <h1>Gestion Clients &amp; Projets</h1>
+      <div class="sub">Connectez-vous pour continuer</div>
+      <form id="loginForm">
+        <div class="field"><label>Identifiant</label><input name="username" required autocomplete="username"></div>
+        <div class="field"><label>Mot de passe</label><input name="password" type="password" required autocomplete="current-password"></div>
+        <button class="btn accent" style="width:100%;justify-content:center;" type="submit">Se connecter</button>
+        <div id="loginErr" class="err"></div>
+      </form>
+    </div>
+  </div>`;
+}
+function bindLogin(){
+  document.getElementById('loginForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const username = f.get('username').trim();
+    const password = f.get('password');
+    const btn = e.target.querySelector('button[type=submit]');
+    const errEl = document.getElementById('loginErr');
+    errEl.textContent = '';
+    btn.disabled = true;
+    try{
+      await apiCall('login','POST',{username,password});
+      await refreshState();
+      location.hash = '#/home';
+      render();
+    }catch(err){
+      errEl.textContent = err.message || 'Identifiants incorrects.';
+      btn.disabled = false;
+    }
+  });
+}
+async function logout(){
+  try{ await apiCall('logout','POST'); }catch(e){}
+  STATE = null;
+  location.hash = '#/home';
+  render();
+}
+
+/* ---------- HOME ---------- */
+function viewHome(){
+  const clients = STATE.entities.filter(e=>!e.isInternal);
+  return `
+  <main>
+    <div class="page-head">
+      <div>
+        <h1>Clients</h1>
+        <div class="sub">${clients.length} client(s) actif(s)</div>
+      </div>
+      ${isAdmin() ? `<button class="btn accent" onclick="createEntityModal()">+ Nouveau client</button>` : ''}
+    </div>
+    <div class="grid cards">
+      ${clients.length ? clients.map(c=>entityCard(c)).join('') : `<div class="empty">Aucun client pour l'instant.</div>`}
+    </div>
+
+    <div class="section-title" style="margin-top:34px;">Tableau de bord global</div>
+    ${STATE.tasks.length ? kpiBlock(STATE.tasks) : `<div class="empty">Aucune tâche enregistrée pour le moment.</div>`}
+  </main>`;
+}
+function entityCard(e){
+  const status = computeEntityStatus(e);
+  const projs = projectsOf(e.id);
+  const projCount = projs.length;
+  const tasks = projs.flatMap(p=>tasksOf(p.id));
+  const k = computeTaskKPIs(tasks);
+  const initials = e.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const avatar = e.avatar ? `<img class="avatar" src="${e.avatar}">` : `<div class="avatar">${initials}</div>`;
+  return `
+  <div class="card clickable entity-card" onclick="go('/entity/${e.id}')">
+    <div class="entity-top">
+      ${avatar}
+      <div>
+        <div class="entity-name">${e.name}</div>
+        <div class="entity-meta">${projCount} projet(s)</div>
+      </div>
+    </div>
+    <div class="entity-stats">
+      <span class="stat-done">Effectué <b>${k.done}</b></span>
+      <span class="stat-progress">En cours <b>${k.inProgress}</b></span>
+      <span class="stat-late">Retard <b>${k.late}</b></span>
+    </div>
+    ${statusBadge(status)}
+  </div>`;
+}
+
+/* ---------- ENTITY ---------- */
+function viewEntity(id){
+  const e = entityById(id);
+  if(!e) return `<main><div class="empty">Fiche introuvable.</div></main>`;
+  const projects = projectsOf(e.id);
+  const crumbs = e.isInternal
+    ? [{label:'Accueil',hash:'/home'},{label:'Mon entreprise'}]
+    : [{label:'Accueil',hash:'/home'},{label:e.name}];
+  return `
+  ${breadcrumb(crumbs)}
+  <main>
+    <div class="page-head">
+      <div>
+        <h1>${e.name} ${e.isInternal ? '<span style="font-size:13px;color:var(--muted);font-weight:500;">(espace interne)</span>' : ''}</h1>
+        <div class="sub">${statusBadge(computeEntityStatus(e))}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        ${isAdmin() ? `<button class="btn accent" onclick="createProjectModal('${e.id}')">+ Nouveau projet</button>` : ''}
+      </div>
+    </div>
+    <div class="section-title">Projets</div>
+    ${projects.length ? projects.map(p=>projectRow(p)).join('') : `<div class="empty">Aucun projet pour le moment.${isAdmin()?' Créez le premier projet.':''}</div>`}
+  </main>`;
+}
+function projectRow(p){
+  const status = computeProjectStatus(p);
+  const tasks = tasksOf(p.id);
+  return `
+  <div class="project-row clickable" onclick="go('/project/${p.id}')" style="cursor:pointer;">
+    <div class="project-main">
+      <h4>${p.name}</h4>
+      <div class="desc">${p.description||''}</div>
+      <div class="project-tags">${tasks.length} tâche(s) · échéance ${p.endDate||'—'}</div>
+    </div>
+    ${statusBadge(status)}
+  </div>`;
+}
+
+/* ---------- PROJECT DETAIL ---------- */
+function computeTaskKPIs(tasks){
+  const total = tasks.length;
+  const late = tasks.filter(t=>t.status==='retard').length;
+  const done = tasks.filter(t=>t.status==='effectue').length;
+  const inProgress = tasks.filter(t=>t.status==='encours').length;
+  const pct = n => total ? Math.round((n/total)*100) : 0;
+  const lateByEmployee = {};
+  tasks.filter(t=>t.status==='retard').forEach(t=>{
+    const key = t.employee || 'Non assigné';
+    lateByEmployee[key] = (lateByEmployee[key]||0)+1;
+  });
+  return {total, late, done, inProgress, latePct:pct(late), donePct:pct(done), inProgressPct:pct(inProgress), lateByEmployee};
+}
+
+function kpiBlock(tasks){
+  const k = computeTaskKPIs(tasks);
+  const employeeRows = Object.entries(k.lateByEmployee).sort((a,b)=>b[1]-a[1]);
+  return `
+  <div class="kpi-grid">
+    <div class="kpi-card kpi-total">
+      <div class="kpi-label">Total tâches</div>
+      <div class="kpi-value">${k.total}</div>
+    </div>
+    <div class="kpi-card kpi-late">
+      <div class="kpi-label">En retard</div>
+      <div class="kpi-value">${k.late} <span class="kpi-pct">${k.latePct}%</span></div>
+    </div>
+    <div class="kpi-card kpi-progress">
+      <div class="kpi-label">En cours</div>
+      <div class="kpi-value">${k.inProgress} <span class="kpi-pct">${k.inProgressPct}%</span></div>
+    </div>
+    <div class="kpi-card kpi-done">
+      <div class="kpi-label">Effectuées</div>
+      <div class="kpi-value">${k.done} <span class="kpi-pct">${k.donePct}%</span></div>
+    </div>
+    ${employeeRows.length ? `
+    <div class="kpi-card kpi-byemployee">
+      <div class="kpi-label">Retard par responsable</div>
+      ${employeeRows.map(([name,count])=>`<div class="kpi-emp-row"><span>${name}</span><b>${count}</b></div>`).join('')}
+    </div>` : ''}
+  </div>`;
+}
+
+function viewProject(id){
+  const p = projectById(id);
+  if(!p) return `<main><div class="empty">Projet introuvable.</div></main>`;
+  const entity = entityById(p.entityId);
+  const tasks = tasksOf(p.id).slice().sort((a,b)=> (a.startDate||'9999-12-31').localeCompare(b.startDate||'9999-12-31'));
+  const meetings = meetingsOf(p.id);
+  const crumbs = entity.isInternal
+    ? [{label:'Accueil',hash:'/home'},{label:'Mon entreprise',hash:'/entity/'+entity.id},{label:p.name}]
+    : [{label:'Accueil',hash:'/home'},{label:entity.name,hash:'/entity/'+entity.id},{label:p.name}];
+
+  let tasksBlock;
+  if(tasks.length===0){
+    tasksBlock = `<div class="empty">Aucune tâche.${isAdmin()?' Ajoutez la première tâche du projet.':''}</div>`;
+  } else if(tasks.length===1){
+    tasksBlock = taskSingleCard(tasks[0]);
+  } else {
+    tasksBlock = taskTable(tasks);
+  }
+
+  return `
+  ${breadcrumb(crumbs)}
+  <main>
+    <div class="page-head">
+      <div>
+        <h1>${p.name}</h1>
+        <div class="sub">${p.description||''} · échéance ${p.endDate||'—'} · ${statusBadge(computeProjectStatus(p))}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        ${isAdmin() ? `<button class="btn ghost sm" onclick="editProjectModal('${p.id}')">Modifier</button>` : ''}
+        ${isAdmin() ? `<button class="btn accent" onclick="createTaskModal('${p.id}')">+ Nouvelle tâche</button>` : ''}
+      </div>
+    </div>
+
+    ${tasks.length ? kpiBlock(tasks) : ''}
+
+    <div class="section-title">Tâches <span style="font-weight:500;font-size:12px;color:var(--muted);">(triées par date de début)</span></div>
+    ${tasksBlock}
+
+    <div class="section-title">
+      <span>Réunions</span>
+      ${isAdmin() ? `<button class="btn ghost sm" onclick="createMeetingModal('${p.id}')">+ Réunion</button>` : ''}
+    </div>
+    ${meetings.length ? meetings.map(m=>meetingRow(m)).join('') : `<div class="empty">Aucune réunion enregistrée.</div>`}
+  </main>`;
+}
+
+function taskSingleCard(t){
+  return `
+  <div class="task-single">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+      <div>
+        <h3 style="margin-bottom:4px;">${t.name}</h3>
+        <div style="font-size:13px;color:var(--muted);">Responsable : <b>${t.employee||'—'}</b></div>
+      </div>
+      ${statusBadge(t.status)}
+    </div>
+    <div style="margin-top:12px;font-size:13px;color:var(--muted);">
+      Du ${t.startDate||'—'} au ${t.endDate||'—'} · Avancement ${t.progress}%
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${t.progress}%;"></div></div>
+    ${t.observation ? `<div class="obs" style="margin-top:10px;max-width:100%;">Observation : ${t.observation}</div>` : ''}
+    ${isAdmin() ? `<div class="task-actions" style="margin-top:14px;">
+      <button class="btn ghost sm" onclick="editTaskModal('${t.id}')">Modifier</button>
+      <button class="btn danger sm" onclick="deleteTask('${t.id}')">Supprimer</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function taskTable(tasks){
+  return `
+  <table class="tasks">
+    <thead><tr>
+      <th>Tâche</th><th>Responsable</th><th>Avancement</th><th>Début</th><th>Fin prévue</th><th>Statut</th><th>Observation</th>${isAdmin()?'<th></th>':''}
+    </tr></thead>
+    <tbody>
+      ${tasks.map(t=>`
+        <tr>
+          <td><b>${t.name}</b></td>
+          <td>${t.employee||'—'}</td>
+          <td style="min-width:120px;">${t.progress}%<div class="progress-bar"><div class="progress-fill" style="width:${t.progress}%;"></div></div></td>
+          <td>${t.startDate||'—'}</td>
+          <td>${t.endDate||'—'}</td>
+          <td>${statusBadge(t.status)}</td>
+          <td class="obs">${t.observation||''}</td>
+          ${isAdmin() ? `<td><div class="task-actions">
+            <button class="btn ghost sm" onclick="editTaskModal('${t.id}')">✎</button>
+            <button class="btn danger sm" onclick="deleteTask('${t.id}')">✕</button>
+          </div></td>` : ''}
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>`;
+}
+
+function meetingRow(m){
+  const report = reportOfMeeting(m.id);
+  return `
+  <div class="meeting-row">
+    <div class="meeting-date">${m.date}</div>
+    <div class="meeting-title">${m.title} ${report && report.shared ? '<span class="shared-tag">· Partagé</span>' : ''}</div>
+    <button class="btn ghost sm" onclick="go('/meeting/${m.id}')">Voir le compte-rendu</button>
+    ${isAdmin() ? `<button class="btn danger sm" onclick="deleteMeeting('${m.id}')">Supprimer</button>` : ''}
+  </div>`;
+}
+
+/* ---------- MEETING / COMPTE-RENDU ---------- */
+function viewMeeting(id){
+  const m = STATE.meetings.find(x=>x.id===id);
+  if(!m) return `<main><div class="empty">Réunion introuvable.</div></main>`;
+  const p = projectById(m.projectId);
+  const entity = entityById(p.entityId);
+  const report = reportOfMeeting(m.id) || {id:null, summary:'', todoRaw:'', shared:false, sharedAt:null};
+  const crumbs = entity.isInternal
+    ? [{label:'Accueil',hash:'/home'},{label:'Mon entreprise',hash:'/entity/'+entity.id},{label:p.name,hash:'/project/'+p.id},{label:m.title}]
+    : [{label:'Accueil',hash:'/home'},{label:entity.name,hash:'/entity/'+entity.id},{label:p.name,hash:'/project/'+p.id},{label:m.title}];
+
+  return `
+  ${breadcrumb(crumbs)}
+  <main>
+    <div class="page-head">
+      <div>
+        <h1>${m.title}</h1>
+        <div class="sub">Réunion du ${m.date} · Projet ${p.name}</div>
+      </div>
+    </div>
+    <div class="report-box">
+      <h3>Compte-rendu</h3>
+      <div class="field">
+        <label>Résumé de la réunion</label>
+        <textarea id="repSummary" ${!isAdmin()?'disabled':''} style="min-height:110px;">${report.summary||''}</textarea>
+      </div>
+      <div class="todo-block">
+        <h4>Tâches à faire (une par ligne)</h4>
+        <textarea id="repTodo" ${!isAdmin()?'disabled':''} placeholder="Ex: Livrer les visuels réseaux sociaux">${report.todoRaw||''}</textarea>
+      </div>
+      ${isAdmin() ? `
+      <div class="modal-actions" style="justify-content:flex-start;margin-top:16px;">
+        <button class="btn ghost" id="btnSaveReport">Enregistrer le brouillon</button>
+        <button class="btn accent" id="btnShareReport">Partager &amp; créer les tâches</button>
+      </div>` : ''}
+      ${report.shared ? `<div style="margin-top:14px;font-size:12.5px;color:var(--done);font-weight:600;">
+        ✓ Partagé ${entity.isInternal ? 'en interne' : 'avec '+entity.name} le ${report.sharedAt}
+      </div>` : ''}
+    </div>
+  </main>`;
+}
+function bindMeetingActions(reportId){
+  const saveBtn = document.getElementById('btnSaveReport');
+  const shareBtn = document.getElementById('btnShareReport');
+  if(saveBtn) saveBtn.onclick = async ()=>{
+    if(!guardAdmin()) return;
+    saveBtn.disabled = true;
+    try{
+      await apiCall('save_report','POST',{id:reportId, summary:document.getElementById('repSummary').value, todoRaw:document.getElementById('repTodo').value});
+      toast('Brouillon enregistré.');
+    }catch(err){ toast(err.message, true); }
+    saveBtn.disabled = false;
+  };
+  if(shareBtn) shareBtn.onclick = async ()=>{
+    if(!guardAdmin()) return;
+    shareBtn.disabled = true;
+    try{
+      const res = await apiCall('share_report','POST',{id:reportId, summary:document.getElementById('repSummary').value, todoRaw:document.getElementById('repTodo').value});
+      await refreshState();
+      render();
+      toast(`Compte-rendu partagé. ${res.created} tâche(s) créée(s).`);
+    }catch(err){ toast(err.message, true); shareBtn.disabled = false; }
+  };
+}
+
+/* =========================================================================
+   ACTIONS CRUD (toutes appellent l'API, puis rafraîchissent l'état)
+   ========================================================================= */
+
+function createEntityModal(){
+  if(!guardAdmin()) return;
+  openModal('Nouveau client', `<div class="field"><label>Nom du client</label><input name="name" required></div>`, async data=>{
+    await apiCall('create_entity','POST',{name:data.name});
+    await refreshState(); render(); toast('Client créé.');
+  }, 'Créer');
+}
+
+function createProjectModal(entityId){
+  if(!guardAdmin()) return;
+  openModal('Nouveau projet', `
+    <div class="field"><label>Nom du projet</label><input name="name" required></div>
+    <div class="field"><label>Description</label><textarea name="description"></textarea></div>
+    <div class="field"><label>Échéance prévue</label><input name="endDate" type="date"></div>
+  `, async data=>{
+    await apiCall('create_project','POST',{entityId, name:data.name, description:data.description||'', endDate:data.endDate||''});
+    await refreshState(); go('/entity/'+entityId); render(); toast('Projet créé.');
+  }, 'Créer');
+}
+function editProjectModal(projectId){
+  if(!guardAdmin()) return;
+  const p = projectById(projectId);
+  openModal('Modifier le projet', `
+    <div class="field"><label>Nom du projet</label><input name="name" value="${p.name}" required></div>
+    <div class="field"><label>Description</label><textarea name="description">${p.description||''}</textarea></div>
+    <div class="field"><label>Échéance prévue</label><input name="endDate" type="date" value="${p.endDate||''}"></div>
+  `, async data=>{
+    await apiCall('update_project','POST',{id:p.id, name:data.name, description:data.description, endDate:data.endDate});
+    await refreshState(); render(); toast('Projet mis à jour.');
+  }, 'Enregistrer');
+}
+
+function taskFormBody(t){
+  t = t || {name:'',employee:'',progress:0,status:'encours',startDate:todayISO(),endDate:'',observation:''};
+  const empOptions = STATE.employees.map(e=>`<option value="${e.name}" ${t.employee===e.name?'selected':''}>${e.name}</option>`).join('');
+  return `
+    <div class="field"><label>Nom de la tâche</label><input name="name" value="${t.name}" required></div>
+    <div class="grid2">
+      <div class="field"><label>Employé responsable</label>
+        <select name="employee"><option value="">—</option>${empOptions}</select>
+      </div>
+      <div class="field"><label>Avancement (%)</label><input name="progress" type="number" min="0" max="100" value="${t.progress}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Date de début</label><input name="startDate" type="date" value="${t.startDate||''}"></div>
+      <div class="field"><label>Date de fin prévue</label><input name="endDate" type="date" value="${t.endDate||''}"></div>
+    </div>
+    <div class="field"><label>Statut</label>
+      <select name="status">
+        <option value="encours" ${t.status==='encours'?'selected':''}>En cours</option>
+        <option value="effectue" ${t.status==='effectue'?'selected':''}>Effectué</option>
+        <option value="retard" ${t.status==='retard'?'selected':''}>En retard</option>
+      </select>
+    </div>
+    <div class="field"><label>Observation</label><textarea name="observation">${t.observation||''}</textarea></div>
+  `;
+}
+function createTaskModal(projectId){
+  if(!guardAdmin()) return;
+  openModal('Nouvelle tâche', taskFormBody(), async data=>{
+    await apiCall('create_task','POST',{projectId, name:data.name, employee:data.employee, progress:Number(data.progress)||0, status:data.status, startDate:data.startDate, endDate:data.endDate, observation:data.observation});
+    await refreshState(); render(); toast('Tâche ajoutée.');
+  }, 'Créer');
+}
+function editTaskModal(taskId){
+  if(!guardAdmin()) return;
+  const t = STATE.tasks.find(x=>x.id===taskId);
+  openModal('Modifier la tâche', taskFormBody(t), async data=>{
+    await apiCall('update_task','POST',{id:t.id, name:data.name, employee:data.employee, progress:Number(data.progress)||0, status:data.status, startDate:data.startDate, endDate:data.endDate, observation:data.observation});
+    await refreshState(); render(); toast('Tâche mise à jour.');
+  }, 'Enregistrer');
+}
+async function deleteTask(taskId){
+  if(!guardAdmin()) return;
+  if(!confirm('Supprimer cette tâche ?')) return;
+  try{
+    await apiCall('delete_task','POST',{id:taskId});
+    await refreshState(); render(); toast('Tâche supprimée.');
+  }catch(err){ toast(err.message, true); }
+}
+
+function createMeetingModal(projectId){
+  if(!guardAdmin()) return;
+  openModal('Nouvelle réunion', `
+    <div class="field"><label>Titre</label><input name="title" required></div>
+    <div class="field"><label>Date</label><input name="date" type="date" value="${todayISO()}" required></div>
+  `, async data=>{
+    await apiCall('create_meeting','POST',{projectId, title:data.title, date:data.date});
+    await refreshState(); render(); toast('Réunion ajoutée.');
+  }, 'Créer');
+}
+async function deleteMeeting(meetingId){
+  if(!guardAdmin()) return;
+  if(!confirm('Supprimer cette réunion et son compte-rendu ?')) return;
+  try{
+    await apiCall('delete_meeting','POST',{id:meetingId});
+    await refreshState(); render(); toast('Réunion supprimée.');
+  }catch(err){ toast(err.message, true); }
+}
+
+/* =========================================================================
+   PARAMÈTRES (ADMIN)
+   ========================================================================= */
+function viewSettings(){
+  if(!isAdmin()) return `<main><div class="empty">Accès réservé au rôle ADMIN.</div></main>`;
+  const s = STATE.settings;
+  return `
+  <main>
+    <div class="page-head"><h1>Paramètres</h1></div>
+    <div class="settings-grid">
+
+      <div class="settings-block">
+        <h4>Identité visuelle</h4>
+        <form id="themeForm">
+          <div class="field"><label>Nom de l'entreprise</label><input name="companyName" value="${s.companyName}"></div>
+          <div class="field"><label>Initiales du logo (si pas d'image)</label><input name="logoText" maxlength="3" value="${s.logoText}"></div>
+          <div class="grid2">
+            <div class="field"><label>Couleur primaire</label><input name="primaryColor" type="color" value="${s.primaryColor}"></div>
+            <div class="field"><label>Couleur secondaire</label><input name="secondaryColor" type="color" value="${s.secondaryColor}"></div>
+          </div>
+          <div class="field"><label>Couleur d'accent</label><input name="accentColor" type="color" value="${s.accentColor}"></div>
+          <div class="field"><label>Logo (image)</label><input type="file" id="logoFile" accept="image/*"></div>
+          <button class="btn accent" type="submit">Appliquer la charte</button>
+        </form>
+      </div>
+
+      <div class="settings-block">
+        <h4>Utilisateurs</h4>
+        ${STATE.users.map(u=>`<div class="userline"><span>${u.name} <span class="mono" style="color:var(--muted);">(${u.username})</span></span><span class="role-pill ${u.role==='ADMIN'?'admin':''}">${u.role}</span></div>`).join('')}
+        <div style="margin-top:12px;">
+          <button class="btn ghost sm" onclick="createUserModal()">+ Ajouter un collaborateur (LECTURE)</button>
+        </div>
+      </div>
+
+      <div class="settings-block">
+        <h4>Employés (assignables aux tâches)</h4>
+        ${STATE.employees.map(e=>`<div class="userline"><span>${e.name}</span><button class="btn danger sm" onclick="deleteEmployee('${e.id}')">✕</button></div>`).join('')}
+        <div style="margin-top:12px;">
+          <button class="btn ghost sm" onclick="createEmployeeModal()">+ Ajouter un employé</button>
+        </div>
+      </div>
+
+      <div class="settings-block">
+        <h4>Base de données</h4>
+        <div class="sub" style="margin-bottom:10px;">Toutes les données sont stockées dans MySQL. Vous pouvez exporter une sauvegarde JSON à tout moment.</div>
+        <button class="btn ghost sm" onclick="exportDB()">⬇ Exporter la DB (.json)</button>
+      </div>
+
+    </div>
+  </main>`;
+}
+function bindGlobalActions(){
+  const themeForm = document.getElementById('themeForm');
+  if(themeForm){
+    themeForm.addEventListener('submit', async e=>{
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const submitBtn = e.target.querySelector('button[type=submit]');
+      submitBtn.disabled = true;
+      const payload = {
+        companyName: f.get('companyName'),
+        logoText: f.get('logoText').toUpperCase(),
+        primaryColor: f.get('primaryColor'),
+        secondaryColor: f.get('secondaryColor'),
+        accentColor: f.get('accentColor'),
+        logoDataUrl: null
+      };
+      const fileInput = document.getElementById('logoFile');
+      try{
+        if(fileInput && fileInput.files[0]){
+          payload.logoDataUrl = await new Promise((resolve,reject)=>{
+            const reader = new FileReader();
+            reader.onload = ()=>resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(fileInput.files[0]);
+          });
+        }
+        await apiCall('update_settings','POST',payload);
+        await refreshState(); render(); toast('Charte graphique mise à jour.');
+      }catch(err){ toast(err.message, true); submitBtn.disabled = false; }
+    });
+  }
+  const reportEl = document.getElementById('repSummary');
+  if(reportEl){
+    const route = currentRoute();
+    const m = STATE.meetings.find(x=>x.id===route[1]);
+    const report = m ? reportOfMeeting(m.id) : null;
+    if(report) bindMeetingActions(report.id);
+  }
+}
+function exportDB(){
+  if(!isAdmin()) return;
+  window.location = 'api.php?action=export';
+}
+function createUserModal(){
+  if(!guardAdmin()) return;
+  openModal('Nouveau collaborateur (LECTURE)', `
+    <div class="field"><label>Nom complet</label><input name="name" required></div>
+    <div class="field"><label>Identifiant</label><input name="username" required></div>
+    <div class="field"><label>Mot de passe</label><input name="password" required></div>
+  `, async data=>{
+    await apiCall('create_user','POST',{username:data.username, password:data.password, name:data.name});
+    await refreshState(); render(); toast('Collaborateur ajouté.');
+  }, 'Créer');
+}
+function createEmployeeModal(){
+  if(!guardAdmin()) return;
+  openModal('Nouvel employé', `<div class="field"><label>Nom</label><input name="name" required></div>`, async data=>{
+    await apiCall('create_employee','POST',{name:data.name});
+    await refreshState(); render(); toast('Employé ajouté.');
+  }, 'Créer');
+}
+async function deleteEmployee(id){
+  if(!guardAdmin()) return;
+  try{
+    await apiCall('delete_employee','POST',{id});
+    await refreshState(); render();
+  }catch(err){ toast(err.message, true); }
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+async function boot(){
+  try{
+    await refreshState();
+  }catch(e){
+    document.getElementById('app').innerHTML = `<div class="loading-screen">Erreur de connexion au serveur : ${e.message}</div>`;
+    return;
+  }
+  render();
+}
+boot();
+</script>
+</body>
+</html>
